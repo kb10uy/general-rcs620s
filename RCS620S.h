@@ -27,7 +27,7 @@ public:
     };
 
 protected:
-    uint8_t buffer[265];
+    uint8_t buffer[RCS620S_MAX_RESPONSE_SIZE];
     uint16_t bufferWritten = 0;
     uint16_t timeout = 1000;
     uint8_t idm[8];
