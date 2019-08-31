@@ -71,6 +71,15 @@ RCS620S::Result RCS620S::sendRaw(const uint8_t *data, uint16_t length)
         return Result::NoAck;
     }
 
+    const auto readHead = read(buffer, 5);
+    if (!readHead) {
+        sendCancel();
+        return Result::Failed;
+    } else if (memcmp(buffer, "\x00\x00\xff", 3) != 0) {
+        sendCancel();
+        return Result::Invalid;
+    }
+
     if (buffer[3] == 0xff && buffer[4] == 0xff) {
         const auto readHeader = read(buffer + 5, 3);
         if (!readHeader || ((buffer[5] + buffer[6] + buffer[7]) & 0xff) != 0) {
@@ -94,10 +103,9 @@ RCS620S::Result RCS620S::sendRaw(const uint8_t *data, uint16_t length)
         return Result::Failed;
     }
 
-    uint8_t csbuf[2];
     const auto responseChecksum = checksum(buffer, bufferWritten);
-    const auto readChecksum = read(csbuf, 2);
-    if (!readChecksum || buffer[0] != responseChecksum || buffer[1] != 0x00) {
+    const auto readChecksum = read(preBuffer, 2);
+    if (!readChecksum || preBuffer[0] != responseChecksum || preBuffer[1] != 0x00) {
         sendCancel();
         return Result::Invalid;
     }
