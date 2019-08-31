@@ -240,7 +240,7 @@ RCS620S::Result RCS620S::pollingTypeA()
 }
 
 /**
- * Type A のポーリングを行う。
+ * Type B のポーリングを行う。
  */
 RCS620S::Result RCS620S::pollingTypeB()
 {
