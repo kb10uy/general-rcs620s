@@ -28,24 +28,21 @@ public:
 
 protected:
     uint8_t buffer[265];
-    uint16_t bufferWritten;
-    uint16_t timeout;
+    uint16_t bufferWritten = 0;
+    uint16_t timeout = 1000;
     uint8_t idm[8];
     uint8_t pmm[8];
-    uint8_t idmLength;
-    Type type;
+    uint8_t idmLength = 0;
+    Type type = Type::Unknown;
 
     // デバイス依存
-    virtual void initializeDevice();
+    virtual void initializeDevice() = 0;
     virtual bool write(const uint8_t *data, uint16_t length) = 0;
     virtual bool read(uint8_t *buffer, uint16_t length) = 0;
     virtual void flush() = 0;
-    virtual size_t available() = 0;
     virtual void delayMillisecond(uint16_t time) = 0;
-    virtual unsigned long currentMillisecond() = 0;
 
     // 制御用
-    bool checkTimeout(unsigned long start);
     Result assertAck(Result previous);
     void sendCancel();
     Result sendRaw(const uint8_t *command, uint16_t length);

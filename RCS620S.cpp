@@ -12,11 +12,6 @@ uint8_t RCS620S::checksum(const uint8_t *data, uint16_t length)
 }
 
 /**
- * タイムアウトしたかどうかをチェックする。
- */
-bool RCS620S::checkTimeout(unsigned long start) { return (currentMillisecond() - start) >= timeout; }
-
-/**
  * ACK の 2byte を確認する。
  */
 RCS620S::Result RCS620S::assertAck(RCS620S::Result previous)
