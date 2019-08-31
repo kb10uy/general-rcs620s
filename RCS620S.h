@@ -36,6 +36,7 @@ protected:
     Type type;
 
     // デバイス依存
+    virtual void initializeDevice();
     virtual bool write(const uint8_t *data, uint16_t length) = 0;
     virtual bool read(uint8_t *buffer, uint16_t length) = 0;
     virtual void flush() = 0;
@@ -44,25 +45,31 @@ protected:
     virtual unsigned long currentMillisecond() = 0;
 
     // 制御用
+    bool checkTimeout(unsigned long start);
+    Result assertAck(Result previous);
     void sendCancel();
     Result sendRaw(const uint8_t *command, uint16_t length);
 
 public:
     // getter
     inline Type detectedType() const { return type; }
-    uint8_t manufactureIdLength() const { return idmLength; }
-    const uint8_t *manufactureId() const { return idm; }
-    const uint8_t *manufactureParameter() const { return pmm; }
+    inline uint8_t manufactureIdLength() const { return idmLength; }
+    inline const uint8_t *manufactureId() const { return idm; }
+    inline const uint8_t *manufactureParameter() const { return pmm; }
+
+    // setter
+    void setTimeout(uint16_t time) { timeout = time; }
 
     // コマンドを直接送信
-    Result sendCommand(const uint8_t *command, uint16_t commandLength, uint8_t *response, uint16_t *responseLength);
+    Result sendCommunicateThruEx(const uint8_t *command, uint16_t commandLength, uint8_t *response, uint16_t *responseLength);
+    Result sendPush(const uint8_t *data, uint16_t length);
 
     // 各種コマンド
     Result initialize();
-    Result turnOffRadioField();
+    Result turnOffRF();
     Result pollingTypeA();
     Result pollingTypeB();
-    Result pollingTypeF();
+    Result pollingTypeF(uint16_t systemCode = 0xffff);
 
     // その他
     static uint8_t checksum(const uint8_t *data, uint16_t length);

@@ -4,10 +4,29 @@
 /**
  * チェックサムを計算する。
  */
-uint8_t RCS620S::checksum(const uint8_t *data, uint16_t length) {
+uint8_t RCS620S::checksum(const uint8_t *data, uint16_t length)
+{
     uint8_t sum = 0;
     for (uint16_t i = 0; i < length; ++i) sum += data[i];
     return uint8_t(-(sum & 0xff));
+}
+
+/**
+ * タイムアウトしたかどうかをチェックする。
+ */
+bool RCS620S::checkTimeout(unsigned long start) { return (currentMillisecond() - start) >= timeout; }
+
+/**
+ * ACK の 2byte を確認する。
+ */
+RCS620S::Result RCS620S::assertAck(RCS620S::Result previous)
+{
+    if (previous != Result::Success) {
+        return previous;
+    } else if (bufferWritten != 2 || memcmp(buffer, "\xd5\x33", 2) != 0) {
+        return Result::NoAck;
+    }
+    return Result::Success;
 }
 
 /**
@@ -90,11 +109,13 @@ RCS620S::Result RCS620S::sendRaw(const uint8_t *data, uint16_t length)
 }
 
 /**
- * コマンドを送信する。
+ * CommunicateThruEx コマンドを送信する。
  * response に this->buffer 及びその一部を指定してはいけない。
  */
-RCS620S::Result
-RCS620S::sendCommand(const uint8_t *command, uint16_t commandLength, uint8_t *response, uint16_t *responseLength)
+RCS620S::Result RCS620S::sendCommunicateThruEx(const uint8_t *command,
+                                               uint16_t commandLength,
+                                               uint8_t *response,
+                                               uint16_t *responseLength)
 {
     const uint16_t commandTimeout = timeout >= 0x8000 ? 0xffff : timeout * 2;
 
@@ -118,3 +139,156 @@ RCS620S::sendCommand(const uint8_t *command, uint16_t commandLength, uint8_t *re
     memcpy(response, buffer + 4, *responseLength);
     return Result::Success;
 }
+
+/**
+ * Push コマンドを送信する。
+ */
+RCS620S::Result RCS620S::sendPush(const uint8_t *data, uint16_t length)
+{
+    if (length > 224) {
+        return Result::Invalid;
+    }
+
+    buffer[0] = 0xb0;
+    buffer[9] = length;
+    memcpy(buffer + 1, idm, 8);
+    memcpy(buffer + 10, data, length);
+
+    uint8_t pushBuffer[RCS620S_MAX_RESPONSE_SIZE];
+    uint16_t pushWritten;
+    const auto pushResult = sendCommunicateThruEx(buffer, length + 10, pushBuffer, &pushWritten);
+    if (pushResult != Result::Success) {
+        return pushResult;
+    } else if (pushWritten != 10 || pushBuffer[0] != 0xb1) {
+        return Result::Invalid;
+    } else if (memcmp(pushBuffer + 1, idm, 8) != 0 || pushBuffer[9] != length) {
+        return Result::Invalid;
+    }
+
+    buffer[0] = 0xa4;
+    buffer[9] = 0x00;
+    memcpy(buffer + 1, idm, 8);
+
+    const auto result = sendCommunicateThruEx(buffer, 10, pushBuffer, &pushWritten);
+    if (pushResult != Result::Success) {
+        return pushResult;
+    } else if (pushWritten != 10 || pushBuffer[0] != 0xa5) {
+        return Result::Invalid;
+    } else if (memcmp(pushBuffer + 1, idm, 8) != 0 || pushBuffer[9] != 0x00) {
+        return Result::Invalid;
+    }
+
+    delayMillisecond(1000);
+    return Result::Success;
+}
+
+/**
+ * RC-S620/S を初期化する。
+ */
+RCS620S::Result RCS620S::initialize()
+{
+    initializeDevice();
+
+    // various timings
+    const auto rvt = assertAck(sendRaw((const uint8_t *) "\xd4\x32\x02\x00\x00\x00", 6));
+    if (rvt != Result::Success) return rvt;
+
+    // max retries
+    const auto rmr = assertAck(sendRaw((const uint8_t *) "\xd4\x32\x05\x00\x00\x00", 6));
+    if (rmr != Result::Success) return rmr;
+
+    // additional wait 24ms
+    const auto rawt = assertAck(sendRaw((const uint8_t *) "\xd4\x32\x81\xb7", 4));
+    if (rawt != Result::Success) return rawt;
+
+    return Result::Success;
+}
+
+/**
+ * 搬送波をオフにする。
+ */
+RCS620S::Result RCS620S::turnOffRF()
+{
+    const auto result = assertAck(sendRaw((const uint8_t *) "\xd4\x32\x01\x00", 4));
+    return result;
+}
+
+/**
+ * Type A のポーリングを行う。
+ */
+RCS620S::Result RCS620S::pollingTypeA()
+{
+    type = Type::Unknown;
+
+    const auto pollResult = sendRaw((const uint8_t *) "\xd4\x4a\x01\x00", 4);
+    if (pollResult != Result::Success) {
+        return pollResult;
+    } else if (bufferWritten < 12) {
+        return Result::NotFound;
+    } else if (memcmp(buffer, "\xd5\x4b\x01\x01\x00", 5) != 0) {
+        return Result::NotFound;
+    }
+
+    type = Type::TypeAMifare;
+    if (memcmp(buffer + 4, "\x00\x44\x00\x07", 4) == 0) {
+        type = Type::TypeAMifareUL;
+    }
+
+    idmLength = buffer[7];
+    memcpy(idm, buffer + 8, idmLength);
+    return Result::Success;
+}
+
+/**
+ * Type A のポーリングを行う。
+ */
+RCS620S::Result RCS620S::pollingTypeB()
+{
+    type = Type::Unknown;
+
+    const auto pollResult = sendRaw((const uint8_t *) "\xd4\x4a\x01\x03\x00", 5);
+    if (pollResult != Result::Success) {
+        return pollResult;
+    } else if (bufferWritten <= 3 && (buffer[0] == 0x7f || buffer[2] != 0x00)) {
+        return Result::NotFound;
+    } else if (bufferWritten < 18) {
+        return Result::NotFound;
+    } else if (memcmp(buffer, "\xd5\x4b\x01\x01", 4) != 0) {
+        return Result::NotFound;
+    }
+
+    type = Type::TypeB;
+
+    idmLength = 4;
+    memcpy(idm, buffer + 5, 4);
+    return Result::Success;
+}
+
+/**
+ * Type F のポーリングを行う。
+ */
+RCS620S::Result RCS620S::pollingTypeF(uint16_t systemCode)
+{
+    type = Type::Unknown;
+
+    memcpy(buffer, "\xd4\x4a\x01\x01\x00\xff\xff\x00\x00", 9);
+    buffer[5] = uint8_t((systemCode >> 8) & 0xff);
+    buffer[6] = uint8_t((systemCode >> 0) & 0xff);
+
+    const auto pollResult = sendRaw(buffer, 9);
+    if (pollResult != Result::Success) {
+        return pollResult;
+    } else if (bufferWritten != 22) {
+        return Result::NotFound;
+    } else if (memcmp(buffer, "\xd5\x4b\x01\x01\x12\x01", 6) != 0) {
+        return Result::NotFound;
+    }
+
+    type = Type::TypeFFeliCa;
+
+    idmLength = 8;
+    memcpy(idm, buffer + 6, 8);
+    memcpy(pmm, buffer + 14, 8);
+    return Result::Success;
+}
+
