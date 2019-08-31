@@ -49,13 +49,13 @@ RCS620S::Result RCS620S::sendRaw(const uint8_t *data, uint16_t length)
     preBuffer[2] = 0xff;
     if (length <= 255) {
         preBuffer[3] = length;
-        preBuffer[4] = uint8_t(preBuffer[3]);
+        preBuffer[4] = uint8_t(-preBuffer[3]);
         write(preBuffer, 5);
     } else {
         preBuffer[3] = 0xff;
         preBuffer[4] = 0xff;
         preBuffer[5] = uint8_t((length >> 8) & 0xff);
-        preBuffer[6] = uint8_t((length >> 8) & 0xff);
+        preBuffer[6] = uint8_t((length >> 0) & 0xff);
         preBuffer[7] = uint8_t(-(preBuffer[5] + preBuffer[6]));
         write(preBuffer, 8);
     }
