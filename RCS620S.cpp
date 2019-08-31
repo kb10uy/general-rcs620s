@@ -170,8 +170,8 @@ RCS620S::Result RCS620S::sendPush(const uint8_t *data, uint16_t length)
     memcpy(buffer + 1, idm, 8);
 
     const auto result = sendCommunicateThruEx(buffer, 10, pushBuffer, &pushWritten);
-    if (pushResult != Result::Success) {
-        return pushResult;
+    if (result != Result::Success) {
+        return result;
     } else if (pushWritten != 10 || pushBuffer[0] != 0xa5) {
         return Result::Invalid;
     } else if (memcmp(pushBuffer + 1, idm, 8) != 0 || pushBuffer[9] != 0x00) {
