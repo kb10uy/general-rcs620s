@@ -42,26 +42,28 @@ RCS620S::Result RCS620S::sendRaw(const uint8_t *data, uint16_t length)
 {
     flush();
 
-    buffer[0] = 0x00;
-    buffer[1] = 0x00;
-    buffer[2] = 0xff;
+    uint8_t preBuffer[9];
+
+    preBuffer[0] = 0x00;
+    preBuffer[1] = 0x00;
+    preBuffer[2] = 0xff;
     if (length <= 255) {
-        buffer[3] = length;
-        buffer[4] = uint8_t(buffer[3]);
-        write(buffer, 5);
+        preBuffer[3] = length;
+        preBuffer[4] = uint8_t(preBuffer[3]);
+        write(preBuffer, 5);
     } else {
-        buffer[3] = 0xff;
-        buffer[4] = 0xff;
-        buffer[5] = uint8_t((length >> 8) & 0xff);
-        buffer[6] = uint8_t((length >> 8) & 0xff);
-        buffer[7] = uint8_t(-(buffer[5] + buffer[6]));
-        write(buffer, 8);
+        preBuffer[3] = 0xff;
+        preBuffer[4] = 0xff;
+        preBuffer[5] = uint8_t((length >> 8) & 0xff);
+        preBuffer[6] = uint8_t((length >> 8) & 0xff);
+        preBuffer[7] = uint8_t(-(preBuffer[5] + preBuffer[6]));
+        write(preBuffer, 8);
     }
 
     write(data, length);
-    buffer[0] = checksum(data, length);
-    buffer[1] = 0x00;
-    write(buffer, 2);
+    preBuffer[0] = checksum(data, length);
+    preBuffer[1] = 0x00;
+    write(preBuffer, 2);
 
     const auto readAck = read(buffer, 6);
     if (!readAck || memcmp(buffer, "\x00\x00\xff\x00\xff\x00", 6) != 0) {
