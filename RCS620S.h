@@ -59,6 +59,7 @@ public:
 
     // コマンドを直接送信
     Result sendCommunicateThruEx(const uint8_t *command, uint16_t commandLength, uint8_t *response, uint16_t *responseLength);
+    Result sendInDataExchange(const uint8_t *command, uint16_t commandLength, uint8_t *response, uint16_t *responseLength);
     Result sendPush(const uint8_t *data, uint16_t length);
 
     // 各種コマンド
@@ -67,6 +68,8 @@ public:
     Result pollingTypeA();
     Result pollingTypeB();
     Result pollingTypeF(uint16_t systemCode = 0xffff);
+    Result readTypeA(uint8_t page, uint8_t *buffer);
+    Result writeTypeA(uint8_t page, const uint8_t *data);
 
     // その他
     static uint8_t checksum(const uint8_t *data, uint16_t length);

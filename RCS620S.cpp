@@ -146,6 +146,27 @@ RCS620S::Result RCS620S::sendCommunicateThruEx(const uint8_t *command,
 }
 
 /**
+ * InDataExchange コマンドを送信する。
+ * response に this->buffer 及びその一部を指定してはいけない。
+ */
+RCS620S::Result
+RCS620S::sendInDataExchange(const uint8_t *command, uint16_t commandLength, uint8_t *response, uint16_t *responseLength)
+{
+    memcpy(buffer, "\xd4\x40\x01", 3);
+    memcpy(buffer + 3, command, commandLength);
+    const auto result = sendRaw(buffer, commandLength + 3);
+    if (result != Result::Success) {
+        return result;
+    } else if (bufferWritten < 3 || memcmp(buffer, "\xd5\x41\x00", 3) != 0) {
+        return Result::Failed;
+    }
+
+    *responseLength = bufferWritten - 3;
+    memcpy(response, buffer + 3, *responseLength);
+    return Result::Success;
+}
+
+/**
  * Push コマンドを送信する。
  */
 RCS620S::Result RCS620S::sendPush(const uint8_t *data, uint16_t length)
@@ -297,3 +318,33 @@ RCS620S::Result RCS620S::pollingTypeF(uint16_t systemCode)
     return Result::Success;
 }
 
+/**
+ * TypeA Mifare Ultralight から 16byte 読み出す。
+ */
+RCS620S::Result RCS620S::readTypeA(uint8_t page, uint8_t *buffer) {
+    uint8_t cmd[2], response[64];
+    uint16_t len;
+    cmd[0] = 0x30;
+    cmd[1] = page;
+
+    const auto result = sendInDataExchange(cmd, 2, response, &len);
+    if (result != Result::Success) return result;
+    if (len < 16) return Result::Invalid;
+    memcpy(buffer, response, 16);
+    return Result::Success;
+}
+
+/**
+ *
+ */
+RCS620S::Result RCS620S::writeTypeA(uint8_t page, const uint8_t *data) {
+    uint8_t cmd[6], response[64];
+    uint16_t len;
+    cmd[0] = 0xa2;
+    cmd[1] = page;
+    memcpy(cmd + 2, data, 4);
+
+    const auto result = sendInDataExchange(cmd, 6, response, &len);
+    if (result != Result::Success) return result;
+    return Result::Success;
+}
